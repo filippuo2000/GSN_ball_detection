@@ -12,7 +12,7 @@ from CustomTransforms import ToFloatTensor
 class TrackNetDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
-        self.batch_size = 1
+        self.batch_size = 2
         self.data_dir = 'Dataset'
 
     def prepare_data(self):
@@ -37,12 +37,12 @@ class TrackNetDataModule(pl.LightningDataModule):
             GaussianDistributionTransform(sigma=10, size=(360, 640)),
         ])
 
-        self.train_dataset = self.dataset.train_dataset(transform=transform, target_transform=transform_label)
-        self.validate_dataset = self.dataset.validate_dataset(transform=transform)
-        self.test_dataset = self.dataset.test_dataset(transform=transform)
+        self.train_dataset = self.dataset.train_dataset()
+        self.validate_dataset = self.dataset.validate_dataset()
+        self.test_dataset = self.dataset.test_dataset()
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers = 1)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers = 4)
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=1)

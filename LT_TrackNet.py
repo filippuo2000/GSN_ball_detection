@@ -14,7 +14,7 @@ def main():
     dm.prepare_data()
     dm.setup()
 
-    trainer = pl.Trainer()
+    trainer = pl.Trainer(num_sanity_val_steps=0)
     trainer.fit(model=classifier, datamodule=dm)
 
 if __name__ == '__main__':

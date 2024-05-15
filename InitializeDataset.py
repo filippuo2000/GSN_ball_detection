@@ -46,7 +46,10 @@ class InitializeDataset():
             csv_reader = csv.reader(f)
             next(csv_reader)    #skip header line
             for row in csv_reader:
-                labels[os.path.join(path, row[0])] = (row[2], row[3])
+                if row[2] == '' and row [3] == '':
+                    labels[os.path.join(path, row[0])] = [-1, -1]
+                else:
+                    labels[os.path.join(path, row[0])] = [int(row[2]), int(row[3])]
         return labels
 
     def random_split(self, size):
@@ -101,10 +104,10 @@ class InitializeDataset():
             print("Number of test data:\t" + str(len(self.x_test)))
 
     def train_dataset(self, transform=None, target_transform=None):
-        return TrackNetDataset(self.y_train, self.x_train, transform, target_transform)
+        return TrackNetDataset(self.y_train, self.x_train, (360, 640), transform, target_transform)
 
     def validate_dataset(self, transform=None, target_transform=None):
-        return TrackNetDataset(self.y_validate, self.x_validate, transform, target_transform)
+        return TrackNetDataset(self.y_validate, self.x_validate, (360, 640), transform, target_transform)
 
     def test_dataset(self, transform=None, target_transform=None):
-        return TrackNetDataset(self.y_test, self.x_test, transform, target_transform)
+        return TrackNetDataset(self.y_test, self.x_test, (360, 640), transform, target_transform)

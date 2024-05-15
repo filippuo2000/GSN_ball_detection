@@ -30,10 +30,10 @@ class GaussianDistributionTransform(object):
         self.size = size
 
     def __call__(self, xy):
-        if xy == ('', ''):
+        if xy == (-1, -1):
             G = torch.zeros(self.size, device=torch.device('cuda'))
         else:
-            xy = (int(xy[0]), int(xy[1]))
+            #xy = (int(xy[0]), int(xy[1]))
             xy = [item/2 for item in xy]
             xx, yy = torch.meshgrid(torch.arange(self.size[0], device=torch.device('cuda')), torch.arange(self.size[1], device=torch.device('cuda')))
             distances = ((xx - xy[0]) ** 2 + (yy - xy[1]) ** 2) / (2 * self.sigma ** 2)
