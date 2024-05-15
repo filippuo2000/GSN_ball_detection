@@ -59,57 +59,60 @@ class TrackNetClassifier(pl.LightningModule):
         return output_y
 
     def postprocess_output(self, feature_map: torch.Tensor, scale=2):
-        # expects a feature map of size [B, 640, 360] - this is the network's output
+        # expects a feature map of size [B, 256, 360, 640] - this is the network's output
         # to match the shape of the label values - List[torch.Tensor, torch.Tensor] - [2, B]
-            locations = torch.zeros((2, feature_map.shape[0])) - 1
-            feature_map = torch.transpose(feature_map, 1, 2)
-            feature_map = feature_map.numpy()
+        feature_map, _ = torch.max(feature_map, dim=1)
+        feature_map = feature_map.cpu()
+        locations = torch.zeros((2, feature_map.shape[0])) - 1
+        feature_map = torch.transpose(feature_map, 1, 2)
+        feature_map = feature_map.detach().numpy()
+        feature_map *= 255
+        feature_map = feature_map.astype(np.uint8)
+        #print("feature map shape is: ", feature_map.shape)
+        ret, heatmap = cv2.threshold(feature_map[:], 127, 255, cv2.THRESH_BINARY)
+        #print("heatmap shape is: ", heatmap.shape)
+        heatmap = cv2.GaussianBlur(heatmap, (5, 5), 0, 0)
+        #print("heatmap shape is: ", heatmap.shape)
+        # show_img(np.expand_dims(heatmap, axis=0))
+        for i in range(feature_map.shape[0]):
+            circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
+                                       minRadius=2,
+                                       maxRadius=7)
+            x, y = -1, -1
+            if circles is not None:
+                if len(circles) == 1:
+                    x = circles[0][0][1] * scale
+                    y = circles[0][0][0] * scale
+            locations[0][i], locations[1][i] = x, y
 
-            feature_map *= 255
-            feature_map = feature_map.astype(np.uint8)
-            print("feature map shape is: ", feature_map.shape)
-            ret, heatmap = cv2.threshold(feature_map[:], 127, 255, cv2.THRESH_BINARY)
-            print("heatmap shape is: ", heatmap.shape)
-            heatmap = cv2.GaussianBlur(heatmap, (5, 5), 0, 0)
-            print("heatmap shape is: ", heatmap.shape)
-            # show_img(np.expand_dims(heatmap, axis=0))
-            for i in range(feature_map.shape[0]):
-                circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
-                                           minRadius=2,
-                                           maxRadius=7)
-                x, y = None, None
-                if circles is not None:
-                    if len(circles) == 1:
-                        x = circles[0][0][1] * scale
-                        y = circles[0][0][0] * scale
-                locations[0][i], locations[1][i] = x, y
-
-            return locations
+        return locations
 
     def compute_loss(self, x, y):
         return  F.binary_cross_entropy(x, y)
 
     def common_step(self, batch, batch_idx):
         x, y = batch
-        y = self.gaussian_distribution(y)
-        y = self.y_3d(y)
+        y_img = self.gaussian_distribution(y)
+        y_img = self.y_3d(y_img)
         outputs = self(x)
-        loss = self.compute_loss(outputs, y)
+        loss = self.compute_loss(outputs, y_img)
         return loss, outputs, y
 
     def common_test_valid_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
         preds = self.postprocess_output(outputs)
+        preds = preds.cuda()
         acc = self.accuracy(preds, y)
         return loss, acc
 
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
-        # accuracy = self.accuracy()
+        #accuracy = self.accuracy()
+        #_, acc = self.common_test_valid_step(batch, batch_idx)
         self.log_dict(  # I sposób logowania
             {
                 "train_loss": loss,
-                # "train_accuracy": accuracy
+                #"train_accuracy": acc
             },
             on_step=False,
             on_epoch=True,

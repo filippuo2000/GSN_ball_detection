@@ -1,5 +1,6 @@
 from torchmetrics import Metric
-from callable import List
+#from callable import List
+import torch
 
 # it does not detect false positives yet
 class MyAccuracy(Metric):
@@ -10,7 +11,8 @@ class MyAccuracy(Metric):
 
     # expects tensors of shape [Batch_size, 2] 2 because x and y is needed
     #
-    def update(self, preds: List[torch.Tensor], target: List[torch.Tensor]) -> None:
+    def update(self, preds, target) -> None:
+        target = torch.stack(target)
         if preds.shape != target.shape:
             raise ValueError("preds and target must have the same shape")
 
