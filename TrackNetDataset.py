@@ -18,14 +18,9 @@ class TrackNetDataset(Dataset):
         image = read_image(img_path)
         image = image.float()
         image = F.interpolate(image.unsqueeze(0), size=self.size, mode='bilinear', align_corners=False).squeeze(0)
-        #image = image.float()
         label = self.img_labels[idx]
-        label = (1, 2)
         if self.transform:
             image = self.transform(image)
-            #print(image.is_cuda)
-            #print('performing transform')
-            #print(image.shape)
         if self.target_transform:
             label = self.target_transform(label)
         return image, label
