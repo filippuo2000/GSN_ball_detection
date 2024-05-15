@@ -1,42 +1,25 @@
 import os
 import pytorch_lightning as pl
-import torchvision.transforms as transforms
 from torch.utils.data.dataloader import DataLoader
 from InitializeDataset import InitializeDataset
-from CustomTransforms import ResizeToCustomSize
-from CustomTransforms import GaussianDistributionTransform
-from CustomTransforms import ToFloatTensor
-
-
 
 class TrackNetDataModule(pl.LightningDataModule):
     def __init__(self):
         super().__init__()
         self.batch_size = 2
-        self.data_dir = 'Dataset'
+        self.data_dir = 'Dataset-small'
 
     def prepare_data(self):
-        self.dataset = InitializeDataset("Dataset")
+        self.dataset = InitializeDataset(self.data_dir)
 
         if os.path.exists("split.txt"):
             self.dataset.read_split("split.txt")
         else:
-            self.dataset.initialize_data()
-            self.dataset.random_split((500, 1))
+            raise RuntimeError("No split.txt file - File defining training, val, test division")
         self.dataset.read_labels()
         self.dataset.stats()
 
     def setup(self, stage=None):
-        transform = transforms.Compose([
-            ToFloatTensor(),
-            ResizeToCustomSize(360, 640),
-        ]
-        )
-
-        transform_label = transforms.Compose([
-            GaussianDistributionTransform(sigma=10, size=(360, 640)),
-        ])
-
         self.train_dataset = self.dataset.train_dataset()
         self.validate_dataset = self.dataset.validate_dataset()
         self.test_dataset = self.dataset.test_dataset()
