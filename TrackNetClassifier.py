@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import cv2
+import numpy as np
+from TrackNetMetrics import MyAccuracy
 
 
 class TrackNetClassifier(pl.LightningModule):
@@ -11,6 +14,7 @@ class TrackNetClassifier(pl.LightningModule):
         self.lr = 1
         self.size = (360, 640)
         self.sigma = 10
+        self.accuracy = MyAccuracy()
 
     def forward(self, x):
         return self.model(x)
@@ -54,9 +58,36 @@ class TrackNetClassifier(pl.LightningModule):
         output_y[mask] = 1
         return output_y
 
+    def postprocess_output(self, feature_map: torch.Tensor, scale=2):
+        # expects a feature map of size [B, 640, 360] - this is the network's output
+        # to match the shape of the label values - List[torch.Tensor, torch.Tensor] - [2, B]
+            locations = torch.zeros((2, feature_map.shape[0])) - 1
+            feature_map = torch.transpose(feature_map, 1, 2)
+            feature_map = feature_map.numpy()
+
+            feature_map *= 255
+            feature_map = feature_map.astype(np.uint8)
+            print("feature map shape is: ", feature_map.shape)
+            ret, heatmap = cv2.threshold(feature_map[:], 127, 255, cv2.THRESH_BINARY)
+            print("heatmap shape is: ", heatmap.shape)
+            heatmap = cv2.GaussianBlur(heatmap, (5, 5), 0, 0)
+            print("heatmap shape is: ", heatmap.shape)
+            # show_img(np.expand_dims(heatmap, axis=0))
+            for i in range(feature_map.shape[0]):
+                circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
+                                           minRadius=2,
+                                           maxRadius=7)
+                x, y = None, None
+                if circles is not None:
+                    if len(circles) == 1:
+                        x = circles[0][0][1] * scale
+                        y = circles[0][0][0] * scale
+                locations[0][i], locations[1][i] = x, y
+
+            return locations
+
     def compute_loss(self, x, y):
         return  F.binary_cross_entropy(x, y)
-
 
     def common_step(self, batch, batch_idx):
         x, y = batch
@@ -68,30 +99,49 @@ class TrackNetClassifier(pl.LightningModule):
 
     def common_test_valid_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
-        #preds = torch.argmax(outputs, dim=1)
-        #acc = 0
-        return loss
+        preds = self.postprocess_output(outputs)
+        acc = self.accuracy(preds, y)
+        return loss, acc
 
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
-        #accuracy = self.accuracy()
+        # accuracy = self.accuracy()
         self.log_dict(  # I sposób logowania
             {
                 "train_loss": loss,
-                #"train_accuracy": accuracy
+                # "train_accuracy": accuracy
             },
             on_step=False,
             on_epoch=True,
             prog_bar=True
         )
-        return loss
+        return {'loss':loss}
 
     def validation_step(self, batch, batch_idx):
-        loss = self.common_test_valid_step(batch, batch_idx)
-        #self.validation_step_output
+        loss, acc = self.common_test_valid_step(batch, batch_idx)
+        self.log_dict( # I sposób logowania
+            {
+                "test_loss": loss,
+                "test_accuracy": acc
+            },
+            on_step = False,
+            on_epoch = True,
+            prog_bar = True
+        )
+        return {'test_loss':loss, "test_acc": acc}
 
     def test_step(self, batch, batch_idx):
-        pass
+        loss, acc = self.common_test_valid_step(batch, batch_idx)
+        self.log_dict( # I sposób logowania
+            {
+                "test_loss": loss,
+                "test_accuracy": acc
+            },
+            on_step = False,
+            on_epoch = True,
+            prog_bar = True
+        )
+        return {'test_loss':loss, "test_acc": acc}
 
     def configure_optimizers(self):
         #return torch.optim.Adam(self.parameters(), lr = 1e-1)
