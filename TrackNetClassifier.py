@@ -101,50 +101,41 @@ class TrackNetClassifier(pl.LightningModule):
     def common_test_valid_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
         preds = self.postprocess_output(outputs)
-        preds = preds.cuda()
+        preds = preds.device(self.device)
         acc = self.accuracy(preds, y)
         return loss, acc
 
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
+        # self.log('train_acc', acc, on_step=True, on_epoch=True, logger=True)
+        return loss
         #accuracy = self.accuracy()
         #_, acc = self.common_test_valid_step(batch, batch_idx)
-        self.log_dict(  # I sposób logowania
-            {
-                "train_loss": loss,
-                #"train_accuracy": acc
-            },
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True
-        )
-        return {'loss':loss}
+        # self.log_dict(  # I sposób logowania
+        #     {
+        #         "train_loss": loss,
+        #         #"train_accuracy": acc
+        #     },
+        #     on_step=False,
+        #     on_epoch=True,
+        #     prog_bar=True
+        # )
+        # return {'loss':loss}
 
     def validation_step(self, batch, batch_idx):
         loss, acc = self.common_test_valid_step(batch, batch_idx)
-        self.log_dict( # I sposób logowania
-            {
-                "test_loss": loss,
-                "test_accuracy": acc
-            },
-            on_step = False,
-            on_epoch = True,
-            prog_bar = True
-        )
-        return {'test_loss':loss, "test_acc": acc}
+        self.log('val_loss', loss, prog_bar=True)
+        self.log('val_acc', acc, prog_bar=True)
+        return loss
+
 
     def test_step(self, batch, batch_idx):
         loss, acc = self.common_test_valid_step(batch, batch_idx)
-        self.log_dict( # I sposób logowania
-            {
-                "test_loss": loss,
-                "test_accuracy": acc
-            },
-            on_step = False,
-            on_epoch = True,
-            prog_bar = True
-        )
-        return {'test_loss':loss, "test_acc": acc}
+        self.log('test_loss', loss, prog_bar=True)
+        self.log('test_acc', acc, prog_bar=True)
+        return loss
+
 
     def configure_optimizers(self):
         #return torch.optim.Adam(self.parameters(), lr = 1e-1)
