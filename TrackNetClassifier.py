@@ -12,7 +12,7 @@ class TrackNetClassifier(pl.LightningModule):
         self.model = model
         self.lr = 1
         self.size = (360, 640)
-        self.sigma = 10
+        self.sigma = 3.3
         self.metrics = MyMetrics()
     def forward(self, x):
         return self.model(x)
