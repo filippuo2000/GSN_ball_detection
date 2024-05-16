@@ -3,7 +3,10 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import cv2
 import numpy as np
+import wandb
 from TrackNetMetrics import MyAccuracy
+from pytorch_lightning.callbacks import Callback
+
 
 
 class TrackNetClassifier(pl.LightningModule):
@@ -140,3 +143,25 @@ class TrackNetClassifier(pl.LightningModule):
     def configure_optimizers(self):
         #return torch.optim.Adam(self.parameters(), lr = 1e-1)
         return torch.optim.Adadelta(self.parameters(), lr=self.lr)
+
+
+class ImagePredictionLogger(Callback):
+    def __init__(self, val_samples, num_samples=8):
+        super().__init__()
+        self.num_samples = num_samples
+        self.val_imgs, self.val_labels = val_samples
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        # Bring the tensors to CPU
+        val_imgs = self.val_imgs.to(device=pl_module.device)
+        val_labels = self.val_labels.to(device=pl_module.device)
+        # Get model prediction
+        logits = pl_module(val_imgs)
+        preds, _ = torch.max(logits, dim=1)
+
+        # Log the images as wandb Image
+        trainer.logger.experiment.log({
+        "examples":[wandb.Image(x, caption=f"random, Label:{y}")
+                       for x, y in zip(val_imgs[:self.num_samples],
+                                             val_labels[:self.num_samples])]
+                       })
