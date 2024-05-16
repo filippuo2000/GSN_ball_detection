@@ -3,9 +3,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import cv2
 import numpy as np
-from TrackNetMetrics import MyAccuracy
-
-
+from TrackNetMetrics import MyMetrics
 
 class TrackNetClassifier(pl.LightningModule):
 
@@ -15,8 +13,7 @@ class TrackNetClassifier(pl.LightningModule):
         self.lr = 1
         self.size = (360, 640)
         self.sigma = 10
-        self.accuracy = MyAccuracy()
-
+        self.metrics = MyMetrics()
     def forward(self, x):
         return self.model(x)
 
@@ -42,7 +39,7 @@ class TrackNetClassifier(pl.LightningModule):
         G = torch.floor(G)
 
         # Handle cases where either x or y is empty
-        empty_mask = (xy[0] == -1) | (xy[1] == -1)
+        empty_mask = (xy[0] == -100) | (xy[1] == -100)
         empty_mask = empty_mask.to(device)
         G[empty_mask] = 0
         return G.int()
@@ -79,7 +76,7 @@ class TrackNetClassifier(pl.LightningModule):
             circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
                                        minRadius=2,
                                        maxRadius=7)
-            x, y = -1, -1
+            x, y = -10, -10
             if circles is not None:
                 if len(circles) == 1:
                     x = circles[0][0][1] * scale
@@ -103,8 +100,11 @@ class TrackNetClassifier(pl.LightningModule):
         loss, outputs, y = self.common_step(batch, batch_idx)
         preds = self.postprocess_output(outputs)
         preds = preds.to(device=self.device)
-        acc = self.accuracy(preds, y)
-        return loss, acc
+        metrics = self.metrics(preds, y)
+        acc = metrics['accuracy']
+        precision = metrics['precision']
+        recall = metrics['recall']
+        return loss, acc, precision, recall
 
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
@@ -125,16 +125,20 @@ class TrackNetClassifier(pl.LightningModule):
         # return {'loss':loss}
 
     def validation_step(self, batch, batch_idx):
-        loss, acc = self.common_test_valid_step(batch, batch_idx)
+        loss, acc, precision, recall = self.common_test_valid_step(batch, batch_idx)
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_acc', acc, prog_bar=True)
+        self.log('val_precision', precision, prog_bar=True)
+        self.log('val_recall', recall, prog_bar=True)
         return loss
 
 
     def test_step(self, batch, batch_idx):
-        loss, acc = self.common_test_valid_step(batch, batch_idx)
+        loss, acc, precision, recall = self.common_test_valid_step(batch, batch_idx)
         self.log('test_loss', loss, prog_bar=True)
         self.log('test_acc', acc, prog_bar=True)
+        self.log('test_precision', precision, prog_bar=True)
+        self.log('test_recall', recall, prog_bar=True)
         return loss
 
 

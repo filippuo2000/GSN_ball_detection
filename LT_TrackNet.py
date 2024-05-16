@@ -26,7 +26,7 @@ def main():
     dm.prepare_data()
     dm.setup()
 
-    trainer = pl.Trainer(check_val_every_n_epoch=1, num_sanity_val_steps=0, accelerator="auto", max_epochs=5000,
+    trainer = pl.Trainer(check_val_every_n_epoch=1, num_sanity_val_steps=1, accelerator="auto", max_epochs=5000,
                          #callbacks=[get_checkpoint_callback(), get_early_stopping(), ImagePredictionLogger()],
                          callbacks=[get_checkpoint_callback(), ImagePredictionLogger()],
                          logger=wandb_logger)

@@ -5,6 +5,9 @@ from pytorch_lightning.loggers import WandbLogger
 import torch
 import wandb
 
+import cv2
+import numpy as np
+
 
 def get_early_stopping():
     early_stop_callback = EarlyStopping(
@@ -54,6 +57,16 @@ class ImagePredictionLogger(Callback):
                 input_img = input_img.to(device=pl_module.device)
                 output = pl_module(input_img)
                 output, _ = torch.max(output, dim=1)
+
+                output = output.cpu()
+                output = torch.transpose(output, 1, 2)
+                output = output.detach().numpy()
+                output *= 255
+                output = output.astype(np.uint8)
+                # print("feature map shape is: ", feature_map.shape)
+                _, output = cv2.threshold(output[:], 127, 255, cv2.THRESH_BINARY)
+                print(output.shape)
+
                 for i in range(output.shape[0]):
                     output_images.append(output[i])
                     labels.append((label[0][i].item(), label[1][i].item()))
