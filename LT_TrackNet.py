@@ -1,7 +1,7 @@
 from TrackNet import TrackNet
-from TrackNetClassifier import TrackNetClassifier, ImagePredictionLogger
+from TrackNetClassifier import TrackNetClassifier
 from TrackNetDataModule import TrackNetDataModule
-from TrackNetCallbacks import get_early_stopping, get_checkpoint_callback
+from TrackNetCallbacks import get_early_stopping, get_checkpoint_callback, ImagePredictionLogger
 from pytorch_lightning.loggers import WandbLogger
 import pytorch_lightning as pl
 import wandb
@@ -19,13 +19,11 @@ def main():
     dm.prepare_data()
     dm.setup()
 
-    val_samples = next(iter(dm.val_dataloader()))
-
-    trainer = pl.Trainer(check_val_every_n_epoch=5, num_sanity_val_steps=0, accelerator="auto", max_epochs=50,
-                         callbacks=[get_checkpoint_callback(), get_early_stopping(), ImagePredictionLogger(val_samples)],
+    trainer = pl.Trainer(check_val_every_n_epoch=1, num_sanity_val_steps=1, accelerator="auto", max_epochs=50,
+                         callbacks=[get_checkpoint_callback(), get_early_stopping(), ImagePredictionLogger()],
                          logger=wandb_logger)
 
-    trainer = pl.Trainer(num_sanity_val_steps=0)
+    #trainer = pl.Trainer(num_sanity_val_steps=0)
     trainer.fit(model=classifier, datamodule=dm)
 
 if __name__ == '__main__':
