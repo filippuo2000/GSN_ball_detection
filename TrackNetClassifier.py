@@ -42,7 +42,8 @@ class TrackNetClassifier(pl.LightningModule):
         empty_mask = (xy[0] == -100) | (xy[1] == -100)
         empty_mask = empty_mask.to(device)
         G[empty_mask] = 0
-        return G.int()
+        #return G.int()
+        return G.long()
 
     def y_3d(self, y):
         device = torch.device('cuda') if y.is_cuda else torch.device('cpu')
@@ -59,12 +60,13 @@ class TrackNetClassifier(pl.LightningModule):
     def postprocess_output(self, feature_map: torch.Tensor, scale=2):
         # expects a feature map of size [B, 256, 360, 640] - this is the network's output
         # to match the shape of the label values - List[torch.Tensor, torch.Tensor] - [2, B]
-        feature_map, _ = torch.max(feature_map, dim=1)
+        _ , feature_map = torch.max(feature_map, dim=1)
+        feature_map = feature_map.float()
         feature_map = feature_map.cpu()
         locations = torch.zeros((2, feature_map.shape[0])) - 1
         feature_map = torch.transpose(feature_map, 1, 2)
         feature_map = feature_map.detach().numpy()
-        feature_map *= 255
+        #feature_map *= 255
         feature_map = feature_map.astype(np.uint8)
         #print("feature map shape is: ", feature_map.shape)
         ret, heatmap = cv2.threshold(feature_map[:], 127, 255, cv2.THRESH_BINARY)
@@ -86,12 +88,13 @@ class TrackNetClassifier(pl.LightningModule):
         return locations
 
     def compute_loss(self, x, y):
-        return  F.binary_cross_entropy(x, y)
+        #return  F.binary_cross_entropy(x, y, reduction='sum')
+        return F.cross_entropy(x, y)
 
     def common_step(self, batch, batch_idx):
         x, y = batch
         y_img = self.gaussian_distribution(y)
-        y_img = self.y_3d(y_img)
+        #y_img = self.y_3d(y_img)
         outputs = self(x)
         loss = self.compute_loss(outputs, y_img)
         return loss, outputs, y

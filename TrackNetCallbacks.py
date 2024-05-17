@@ -56,16 +56,18 @@ class ImagePredictionLogger(Callback):
                 input_img, label = batch
                 input_img = input_img.to(device=pl_module.device)
                 output = pl_module(input_img)
-                output, _ = torch.max(output, dim=1)
+                _ , output = torch.max(output, dim=1)
+                output = output.float()
+                #print (output.shape)
 
-                output = output.cpu()
-                output = torch.transpose(output, 1, 2)
-                output = output.detach().numpy()
-                output *= 255
-                output = output.astype(np.uint8)
-                # print("feature map shape is: ", feature_map.shape)
-                _, output = cv2.threshold(output[:], 127, 255, cv2.THRESH_BINARY)
-                print(output.shape)
+                #output = output.cpu()
+                #output = torch.transpose(output, 1, 2)
+                #output = output.detach().numpy()
+                #output *= 255
+                #output = output.astype(np.uint8)
+                ## print("feature map shape is: ", feature_map.shape)
+                #_, output = cv2.threshold(output[:], 127, 255, cv2.THRESH_BINARY)
+                #print(output.shape)
 
                 for i in range(output.shape[0]):
                     output_images.append(output[i])
