@@ -1,0 +1,5 @@
+numpy
+opencv-python
+pytorch-lightning == 2.1.0
+wandb
+pytorch
