@@ -1,5 +1,4 @@
 from torchmetrics import Metric
-#from callable import List
 import torch
 
 # it does not detect false positives yet
@@ -20,13 +19,6 @@ class MyMetrics(Metric):
         if preds.shape != target.shape:
             raise ValueError("preds and target must have the same shape")
 
-        preds = preds.sum(dim=0)
-        target = target.sum(dim=0)
-
-        mask_fn = (preds < 0) & (target > 0) # not detected when should have
-        mask_fp = (preds > 0) & (target < 0) # detected when it should not have
-        mask_tn = (preds < 0) & (target < 0) # not detected when should not have
-
         #print("false negatives: ", mask_fn.sum())
         #print("false positive: ", mask_fp.sum())
         #print("true negative: ", mask_tn.sum())
@@ -34,10 +26,17 @@ class MyMetrics(Metric):
         # set [-10,-10] for not detected in preds
         # set [-100, -100] for not detected in target
         self.incorrect = (torch.sqrt((preds-target)**2).sum(dim=0)>5).sum() # helper
+        self.tp = (torch.sqrt((preds-target)**2).sum(dim=0)<=5).sum() # TP
+
+        preds_ = preds.sum(dim=0)
+        target_ = target.sum(dim=0)
+
+        mask_fn = (preds_ < 0) & (target_ > 0) # not detected when should have
+        mask_fp = (preds_ > 0) & (target_ < 0) # detected when it should not have
+        mask_tn = (preds_ < 0) & (target_ < 0) # not detected when should not have
         self.fn = mask_fn.sum() # FN
         self.tn = mask_tn.sum() # TN
         self.fp = self.incorrect - self.tn - self.fn # FP
-        self.tp = (torch.sqrt((preds-target)**2).sum(dim=0)<=5).sum() # TP
 
 
     def compute(self) -> torch.Tensor:
