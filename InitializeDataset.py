@@ -14,7 +14,7 @@ from TrackNetDataset import TrackNetDataset
 # split data randomly into val, train, test subsets (given number of elements for train, and val subset)
 # save and read data split to txt file,
 # return TrackNetDataset objects with data relevant for val, train, test subsets
-class InitializeDataset()
+class InitializeDataset():
     def __init__(self, dataset_path):
         self.dataset_path = Path(dataset_path)
         self.x = []
