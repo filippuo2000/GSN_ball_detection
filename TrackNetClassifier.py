@@ -45,7 +45,7 @@ class TrackNetClassifier(pl.LightningModule):
         #return G.int()
         return G.long()
 
-    def y_3d(self, y):
+    def y_onehot(self, y):
         device = torch.device('cuda') if y.is_cuda else torch.device('cpu')
 
         batch_size = y.size(0)
@@ -94,7 +94,7 @@ class TrackNetClassifier(pl.LightningModule):
     def common_step(self, batch, batch_idx):
         x, y = batch
         y_img = self.gaussian_distribution(y)
-        #y_img = self.y_3d(y_img)
+        #y_img = self.y_onehot(y_img)
         outputs = self(x)
         loss = self.compute_loss(outputs, y_img)
         return loss, outputs, y
