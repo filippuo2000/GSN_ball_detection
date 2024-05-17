@@ -18,27 +18,24 @@ class TrackNetClassifier(pl.LightningModule):
         return self.model(x)
 
     def gaussian_distribution(self, xy):
+        # expects list with two tensors, first tensor consists of x values, second - y values
+        # returns feature map, based on given xy coordinates, in shape [B, 360, 640]
         device = torch.device('cuda') if xy[0].is_cuda else torch.device('cpu')
 
         batch_size = xy[0].size(0)
         xx, yy = torch.meshgrid(torch.arange(self.size[0], device=device), torch.arange(self.size[1], device=device))
         xx = xx.unsqueeze(0).expand(batch_size, -1, -1)  # Expand dimensions for broadcasting
         yy = yy.unsqueeze(0).expand(batch_size, -1, -1)
-
         xy_batch = [item.unsqueeze(1).to(device) / 2 for item in xy]
-
         # Reshape tensors to ensure compatible sizes for concatenation
         xy_batch[0] = xy_batch[0].reshape(batch_size, 1, 1, -1)
         xy_batch[1] = xy_batch[1].reshape(batch_size, 1, 1, -1)
-
         xy_batch = torch.cat(xy_batch, dim=3)  # Correct concatenation
-
         distances = ((xx - xy_batch[:, :, :, 0]) ** 2 + (yy - xy_batch[:, :, :, 1]) ** 2) / (2 * self.sigma ** 2)
 
         G = torch.exp(-distances) * 255
         G = torch.floor(G)
-
-        # Handle cases where either x or y is empty
+        # Handle cases where either x or y is empty (denoted as value = -100)
         empty_mask = (xy[0] == -100) | (xy[1] == -100)
         empty_mask = empty_mask.to(device)
         G[empty_mask] = 0
@@ -46,8 +43,9 @@ class TrackNetClassifier(pl.LightningModule):
         return G.long()
 
     def y_onehot(self, y):
+        # expects a feature map of shape [B, 360, 640]
+        # returns one hot encoding in shape [B, 256, 360, 640]
         device = torch.device('cuda') if y.is_cuda else torch.device('cpu')
-
         batch_size = y.size(0)
         output_y = torch.zeros((batch_size, 256, self.size[0], self.size[1]), device=device)
         index_tensor = torch.arange(256, device=device).view(1, -1, 1, 1)
@@ -93,14 +91,17 @@ class TrackNetClassifier(pl.LightningModule):
 
     def common_step(self, batch, batch_idx):
         x, y = batch
+        #prepare y feature map
         y_img = self.gaussian_distribution(y)
         #y_img = self.y_onehot(y_img)
+
         outputs = self(x)
         loss = self.compute_loss(outputs, y_img)
         return loss, outputs, y
 
     def common_test_valid_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
+        #locate xy coordinates basing on resulting feature map
         preds = self.postprocess_output(outputs)
         preds = preds.to(device=self.device)
         metrics = self.metrics(preds, y)
@@ -112,20 +113,8 @@ class TrackNetClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
         self.log('train_loss', loss, on_step=True, on_epoch=True, logger=True)
-        # self.log('train_acc', acc, on_step=True, on_epoch=True, logger=True)
         return loss
-        #accuracy = self.accuracy()
-        #_, acc = self.common_test_valid_step(batch, batch_idx)
-        # self.log_dict(  # I sposób logowania
-        #     {
-        #         "train_loss": loss,
-        #         #"train_accuracy": acc
-        #     },
-        #     on_step=False,
-        #     on_epoch=True,
-        #     prog_bar=True
-        # )
-        # return {'loss':loss}
+
 
     def validation_step(self, batch, batch_idx):
         loss, acc, precision, recall = self.common_test_valid_step(batch, batch_idx)
