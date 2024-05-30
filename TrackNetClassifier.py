@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import cv2
 import numpy as np
 from TrackNetMetrics import MyMetrics
+from CrossEntropy import CrossEntropy
 
 class TrackNetClassifier(pl.LightningModule):
 
@@ -14,6 +15,7 @@ class TrackNetClassifier(pl.LightningModule):
         self.size = (360, 640)
         self.sigma = 3.3
         self.metrics = MyMetrics()
+        self.cross_entropy = CrossEntropy(epsilon=1e-10)
     def forward(self, x):
         return self.model(x)
 
@@ -31,7 +33,7 @@ class TrackNetClassifier(pl.LightningModule):
         xy_batch[0] = xy_batch[0].reshape(batch_size, 1, 1, -1)
         xy_batch[1] = xy_batch[1].reshape(batch_size, 1, 1, -1)
         xy_batch = torch.cat(xy_batch, dim=3)  # Correct concatenation
-        distances = ((xx - xy_batch[:, :, :, 0]) ** 2 + (yy - xy_batch[:, :, :, 1]) ** 2) / (2 * self.sigma ** 2)
+        distances = ((xx - xy_batch[:, :, :, 1]) ** 2 + (yy - xy_batch[:, :, :, 0]) ** 2) / (2 * self.sigma ** 2)
 
         G = torch.exp(-distances) * 255
         G = torch.floor(G)
@@ -39,8 +41,8 @@ class TrackNetClassifier(pl.LightningModule):
         empty_mask = (xy[0] == -100) | (xy[1] == -100)
         empty_mask = empty_mask.to(device)
         G[empty_mask] = 0
-        #return G.int()
-        return G.long()
+        return G.int()
+        #return G.long()
 
     def y_onehot(self, y):
         # expects a feature map of shape [B, 360, 640]
@@ -73,9 +75,9 @@ class TrackNetClassifier(pl.LightningModule):
         #print("heatmap shape is: ", heatmap.shape)
         # show_img(np.expand_dims(heatmap, axis=0))
         for i in range(feature_map.shape[0]):
-            circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
-                                       minRadius=2,
-                                       maxRadius=7)
+            circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=0.9,
+                                       minRadius=1,
+                                       maxRadius=15)
             x, y = -10, -10
             if circles is not None:
                 if len(circles) == 1:
@@ -86,14 +88,15 @@ class TrackNetClassifier(pl.LightningModule):
         return locations
 
     def compute_loss(self, x, y):
-        #return  F.binary_cross_entropy(x, y, reduction='sum')
-        return F.cross_entropy(x, y)
+        return self.cross_entropy(x, y)
+        #return  F.binary_cross_entropy(x, y)
+        #return F.cross_entropy(x, y)
 
     def common_step(self, batch, batch_idx):
         x, y = batch
         #prepare y feature map
         y_img = self.gaussian_distribution(y)
-        #y_img = self.y_onehot(y_img)
+        y_img = self.y_onehot(y_img)
 
         outputs = self(x)
         loss = self.compute_loss(outputs, y_img)
