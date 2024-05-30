@@ -19,14 +19,11 @@ class MyMetrics(Metric):
         if preds.shape != target.shape:
             raise ValueError("preds and target must have the same shape")
 
-        #print("false negatives: ", mask_fn.sum())
-        #print("false positive: ", mask_fp.sum())
-        #print("true negative: ", mask_tn.sum())
 
         # set [-10,-10] for not detected in preds
         # set [-100, -100] for not detected in target
-        self.incorrect = (torch.sqrt((preds-target)**2).sum(dim=0)>5).sum() # helper
-        self.tp = (torch.sqrt((preds-target)**2).sum(dim=0)<=5).sum() # TP
+        self.incorrect = (torch.sqrt(((preds-target)**2).sum(dim=0))>5).sum() # helper
+        self.tp = (torch.sqrt(((preds-target)**2).sum(dim=0))<=5).sum() # TP
 
         preds_ = preds.sum(dim=0)
         target_ = target.sum(dim=0)
@@ -41,9 +38,9 @@ class MyMetrics(Metric):
 
     def compute(self) -> torch.Tensor:
         return {
-            "precision": self.tp.float() / (self.tp.float() + self.fp.float()),
-            "recall": self.tp.float() / (self.tp.float() + self.fn.float()),
-            "accuracy": self.tp.float() / self.total
+            "precision": self.tp.float() / (self.tp.float() + self.fp.float() + 0.00001),
+            "recall": self.tp.float() / (self.tp.float() + self.fn.float() + 0.000001),
+            "accuracy": (self.tp.float() + self.tn.float()) / self.total
         }
 
 # precision = TP / TP+FP
