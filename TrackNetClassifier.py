@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import cv2
 import numpy as np
 from TrackNetMetrics import MyMetrics
+from CrossEntropy import CrossEntropy
 
 class TrackNetClassifier(pl.LightningModule):
 
@@ -13,7 +14,8 @@ class TrackNetClassifier(pl.LightningModule):
         self.lr = 1
         self.size = (360, 640)
         self.sigma = 3.3
-        self.metrics = MyMetrics()
+        self.metrics = MyMetrics().to(device=self.device)
+        self.cross_entropy = CrossEntropy(epsilon=1e-10)
     def forward(self, x):
         return self.model(x)
 
@@ -31,7 +33,7 @@ class TrackNetClassifier(pl.LightningModule):
         xy_batch[0] = xy_batch[0].reshape(batch_size, 1, 1, -1)
         xy_batch[1] = xy_batch[1].reshape(batch_size, 1, 1, -1)
         xy_batch = torch.cat(xy_batch, dim=3)  # Correct concatenation
-        distances = ((xx - xy_batch[:, :, :, 0]) ** 2 + (yy - xy_batch[:, :, :, 1]) ** 2) / (2 * self.sigma ** 2)
+        distances = ((xx - xy_batch[:, :, :, 1]) ** 2 + (yy - xy_batch[:, :, :, 0]) ** 2) / (2 * self.sigma ** 2)
 
         G = torch.exp(-distances) * 255
         G = torch.floor(G)
@@ -39,8 +41,8 @@ class TrackNetClassifier(pl.LightningModule):
         empty_mask = (xy[0] == -100) | (xy[1] == -100)
         empty_mask = empty_mask.to(device)
         G[empty_mask] = 0
-        #return G.int()
-        return G.long()
+        return G.int()
+        #return G.long()
 
     def y_onehot(self, y):
         # expects a feature map of shape [B, 360, 640]
@@ -64,18 +66,15 @@ class TrackNetClassifier(pl.LightningModule):
         locations = torch.zeros((2, feature_map.shape[0])) - 1
         feature_map = torch.transpose(feature_map, 1, 2)
         feature_map = feature_map.detach().numpy()
-        #feature_map *= 255
         feature_map = feature_map.astype(np.uint8)
         #print("feature map shape is: ", feature_map.shape)
         ret, heatmap = cv2.threshold(feature_map[:], 127, 255, cv2.THRESH_BINARY)
-        #print("heatmap shape is: ", heatmap.shape)
-        heatmap = cv2.GaussianBlur(heatmap, (5, 5), 0, 0)
-        #print("heatmap shape is: ", heatmap.shape)
-        # show_img(np.expand_dims(heatmap, axis=0))
+
         for i in range(feature_map.shape[0]):
-            circles = cv2.HoughCircles(heatmap[i], cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=2,
-                                       minRadius=2,
-                                       maxRadius=7)
+            heatmap_i =  cv2.GaussianBlur(heatmap[i], (5, 5), 0, 0)
+            circles = cv2.HoughCircles(heatmap_i, cv2.HOUGH_GRADIENT, dp=1, minDist=1, param1=100, param2=0.9,
+                                       minRadius=1,
+                                       maxRadius=15)
             x, y = -10, -10
             if circles is not None:
                 if len(circles) == 1:
@@ -86,14 +85,15 @@ class TrackNetClassifier(pl.LightningModule):
         return locations
 
     def compute_loss(self, x, y):
-        #return  F.binary_cross_entropy(x, y, reduction='sum')
-        return F.cross_entropy(x, y)
+        return self.cross_entropy(x, y)
+        #return  F.binary_cross_entropy(x, y)
+        #return F.cross_entropy(x, y)
 
     def common_step(self, batch, batch_idx):
         x, y = batch
         #prepare y feature map
         y_img = self.gaussian_distribution(y)
-        #y_img = self.y_onehot(y_img)
+        y_img = self.y_onehot(y_img)
 
         outputs = self(x)
         loss = self.compute_loss(outputs, y_img)
@@ -103,12 +103,10 @@ class TrackNetClassifier(pl.LightningModule):
         loss, outputs, y = self.common_step(batch, batch_idx)
         #locate xy coordinates basing on resulting feature map
         preds = self.postprocess_output(outputs)
+        self.metrics = self.metrics.to(device=self.device)
         preds = preds.to(device=self.device)
-        metrics = self.metrics(preds, y)
-        acc = metrics['accuracy']
-        precision = metrics['precision']
-        recall = metrics['recall']
-        return loss, acc, precision, recall
+        self.metrics.update(preds, y)
+        return loss
 
     def training_step(self, batch, batch_idx):
         loss, outputs, y = self.common_step(batch, batch_idx)
@@ -117,21 +115,27 @@ class TrackNetClassifier(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        loss, acc, precision, recall = self.common_test_valid_step(batch, batch_idx)
+        loss = self.common_test_valid_step(batch, batch_idx)
         self.log('val_loss', loss, prog_bar=True)
-        self.log('val_acc', acc, prog_bar=True)
-        self.log('val_precision', precision, prog_bar=True)
-        self.log('val_recall', recall, prog_bar=True)
-        return loss
 
+    def on_validation_epoch_end(self) -> None:
+        results = self.metrics.compute()
+        self.log('val_acc', results['accuracy'], prog_bar=True)
+        self.log('val_precision', results['precision'], prog_bar=True)
+        self.log('val_recall', results['recall'], prog_bar=True)
+        self.metrics.reset()
 
     def test_step(self, batch, batch_idx):
-        loss, acc, precision, recall = self.common_test_valid_step(batch, batch_idx)
+        loss = self.common_test_valid_step(batch, batch_idx)
         self.log('test_loss', loss, prog_bar=True)
-        self.log('test_acc', acc, prog_bar=True)
-        self.log('test_precision', precision, prog_bar=True)
-        self.log('test_recall', recall, prog_bar=True)
-        return loss
+
+
+    def on_test_epoch_end(self) -> None:
+        results = self.metrics.compute()
+        self.log('test_acc', results['accuracy'], prog_bar=True)
+        self.log('test_precision', results['precision'], prog_bar=True)
+        self.log('test_recall', results['recall'], prog_bar=True)
+        self.metrics.reset()
 
 
     def configure_optimizers(self):

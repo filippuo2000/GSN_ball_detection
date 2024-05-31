@@ -76,7 +76,8 @@ class TrackNet(nn.Module):
         x = self.bn16(F.relu(self.conv16(x)))
         x = self.bn17(F.relu(self.conv17(x)))
         x = self.bn18(F.relu(self.conv18(x)))
-        if not self.training:
-            x = F.softmax(x, dim=1) #softmax along channels (256 chanels)
+        #if not self.training:
+        #    x = F.softmax(x, dim=1) #softmax along channels (256 chanels)
+        x = F.softmax(x, dim=1)  # softmax along channels (256 chanels)
 
         return x
