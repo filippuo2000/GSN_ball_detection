@@ -53,7 +53,7 @@ class InitializeDataset():
             next(csv_reader)    #skip header line
             for row in csv_reader:
                 if row[2] == '' and row [3] == '':
-                    labels[os.path.normpath(os.path.join(path, row[0]))] = [-1, -1]
+                    labels[os.path.normpath(os.path.join(path, row[0]))] = [-100, -100]
                 else:
                     labels[os.path.normpath(os.path.join(path, row[0]))] = [int(row[2]), int(row[3])]
         return labels
